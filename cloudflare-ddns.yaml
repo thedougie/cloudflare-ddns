@@ -1,0 +1,46 @@
+- name: Install cloudflare-ddns
+  hosts: master
+  #become: true
+  gather_facts: false
+  vars:
+    desired_state: "present"
+  tasks:
+  # Adding stable helm repo. I created a helm package with my other repo from favonia/cloudflare-ddns
+    - name: Add stable chart repo
+      kubernetes.core.helm_repository:
+        validate_certs: false
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        #force_update: true
+        repo_name: cloudflare-ddns
+        repo_url: "https://crunchingcode.github.io/cloudflare-ddns/"
+        state: present
+
+    - name: helm repo update
+      kubernetes.core.helm:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: absent
+        release_name: dummy # tricks needed to refresh in separate step
+        release_namespace: kube-system
+        update_repo_cache: true
+    - name: Deploy cloudflare-ddns
+      kubernetes.core.helm:
+        validate_certs: false
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        name: cloudflare-ddns
+        chart_ref: cloudflare-ddns/cloudflare-ddns
+        create_namespace: true
+        release_namespace: cloudflare-ddns
+        state: "{{ desired_state }}"
+#        timeout: 10m
+        wait: true
+        release_values:
+          env:
+          # API TOKEN WITH ACCESS to DNS etc.  THIS IS NOT THE API KEY. See https://developers.cloudflare.com/fundamentals/api/get-started/create-token/ I call this from values.yaml which is encrypted in ansible vault.  
+            CF_API_TOKEN: "{{ dougie_cloudflare_api_token }}"
+            DOMAINS: "thedougie.com,www.thedougie.com"
+            PROXIED: "true"
+            IP6_PROVIDER: "none"
+          image:
+            repository: "favonia/cloudflare-ddns"
+            tag: "latest"
+            pullPolicy: "IfNotPresent"           
